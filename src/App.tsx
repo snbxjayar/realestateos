@@ -41,11 +41,11 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/listings" element={<PublicListings />} />
+        <Route path="/" element={<PublicListings />} />
         <Route path="/listings/:id" element={<PublicPropertyDetail />} />
         <Route path="/auth" element={<AuthPage />} />
         <Route
-          path="/"
+          path="/dashboard"
           element={
             <ProtectedRoute>
               <Dashboard />

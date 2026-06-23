@@ -12,7 +12,7 @@ import {
 import { useAuth } from '../../hooks';
 
 const MENU_ITEMS = [
-  { label: 'Dashboard', icon: LayoutDashboard, path: '/' },
+  { label: 'Dashboard', icon: LayoutDashboard, path: '/dashboard' },
   { label: 'Properties', icon: Building2, path: '/properties' },
   { label: 'Leads', icon: Users, path: '/leads' },
   { label: 'Deals', icon: Briefcase, path: '/deals' },

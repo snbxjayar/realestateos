@@ -160,7 +160,7 @@ export const PublicPropertyDetail = () => {
       {/* Back nav */}
       <div className="max-w-6xl mx-auto px-6 pt-6 pb-2">
         <button
-          onClick={() => navigate('/listings')}
+          onClick={() => navigate('/')}
           className="flex items-center gap-2 text-sm text-gray-500 hover:text-[#0F2D52] transition-colors"
         >
           <ArrowLeft size={16} />
@@ -177,7 +177,7 @@ export const PublicPropertyDetail = () => {
       {loadError && (
         <div className="max-w-6xl mx-auto px-6 py-20 text-center text-gray-500">
           <p className="text-lg">{loadError}</p>
-          <button onClick={() => navigate('/listings')} className="mt-4 text-[#0F2D52] underline text-sm">
+          <button onClick={() => navigate('/')} className="mt-4 text-[#0F2D52] underline text-sm">
             ← Back to listings
           </button>
         </div>
@@ -359,7 +359,7 @@ export const PublicPropertyDetail = () => {
                         Thank you! Our agent will reach out to you shortly.
                       </p>
                       <button
-                        onClick={() => navigate('/listings')}
+                        onClick={() => navigate('/')}
                         className="text-sm text-[#0F2D52] underline hover:no-underline"
                       >
                         ← Browse more properties
