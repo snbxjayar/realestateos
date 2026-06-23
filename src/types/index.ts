@@ -42,6 +42,7 @@ export interface Property {
   location: PropertyLocation;
   details: PropertyDetails;
   images: string[];
+  description?: string;
   agentId: string;
   developer?: string;
   turnoverDate?: Date;

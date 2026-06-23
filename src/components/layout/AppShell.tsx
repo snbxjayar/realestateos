@@ -1,6 +1,7 @@
 import { ReactNode } from 'react';
 import { Navbar } from './Navbar';
 import { Sidebar } from './Sidebar';
+import { Toast } from '../ui/Toast';
 import { useUIStore } from '../../store';
 
 interface AppShellProps {
@@ -19,6 +20,7 @@ export const AppShell = ({ children }: AppShellProps) => {
           {children}
         </main>
       </div>
+      <Toast />
     </div>
   );
 };

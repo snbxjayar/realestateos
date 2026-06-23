@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
-import { X } from 'lucide-react';
+import { X, Upload, ImageIcon } from 'lucide-react';
 import { Modal } from '../ui/Modal';
 import { Input } from '../ui/Input';
 import { Button } from '../ui/Button';
 import { Property, PropertyType, PropertyStatus } from '../../types';
 import { propertyService } from '../../services/propertyService';
 import { uploadImages, isValidImage, getImageValidationError } from '../../lib/imageUpload';
+import { useUIStore } from '../../store';
 
 interface AddPropertyModalProps {
   isOpen: boolean;
@@ -16,6 +17,31 @@ interface AddPropertyModalProps {
   onPropertyUpdated?: (property: Property) => void;
 }
 
+const BLANK_FORM = {
+  title: '',
+  type: 'condo' as PropertyType,
+  status: 'available' as PropertyStatus,
+  price: '',
+  address: '',
+  city: '',
+  province: '',
+  region: '',
+  bedrooms: '',
+  bathrooms: '',
+  floorArea: '',
+  lotArea: '',
+  parking: '',
+  developer: '',
+  turnoverDate: '',
+  tags: '',
+  description: '',
+};
+
+const selectClass =
+  'w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary bg-white';
+
+const labelClass = 'block text-sm font-medium text-text mb-1';
+
 export const AddPropertyModal = ({
   isOpen,
   onClose,
@@ -24,31 +50,19 @@ export const AddPropertyModal = ({
   onPropertyAdded,
   onPropertyUpdated,
 }: AddPropertyModalProps) => {
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [uploadingImages, setUploadingImages] = useState(false);
+  const { showToast } = useUIStore();
   const isEditMode = !!property;
-  const [formData, setFormData] = useState({
-    title: '',
-    type: 'condo' as PropertyType,
-    status: 'available' as PropertyStatus,
-    price: '',
-    address: '',
-    city: '',
-    province: '',
-    region: '',
-    bedrooms: '',
-    bathrooms: '',
-    floorArea: '',
-    lotArea: '',
-    parking: '',
-    tags: '',
-  });
+
+  const [formData, setFormData] = useState(BLANK_FORM);
   const [uploadedImages, setUploadedImages] = useState<string[]>([]);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [previewUrls, setPreviewUrls] = useState<string[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [formError, setFormError] = useState('');
 
   useEffect(() => {
+    if (!isOpen) return;
     if (isEditMode && property) {
       setFormData({
         title: property.title,
@@ -59,436 +73,330 @@ export const AddPropertyModal = ({
         city: property.location.city,
         province: property.location.province,
         region: property.location.region,
-        bedrooms: property.details.bedrooms?.toString() || '',
-        bathrooms: property.details.bathrooms?.toString() || '',
-        floorArea: property.details.floorArea?.toString() || '',
-        lotArea: property.details.lotArea?.toString() || '',
-        parking: property.details.parking?.toString() || '',
-        tags: property.tags?.join(', ') || '',
+        bedrooms: property.details.bedrooms?.toString() ?? '',
+        bathrooms: property.details.bathrooms?.toString() ?? '',
+        floorArea: property.details.floorArea?.toString() ?? '',
+        lotArea: property.details.lotArea?.toString() ?? '',
+        parking: property.details.parking?.toString() ?? '',
+        developer: property.developer ?? '',
+        turnoverDate: property.turnoverDate
+          ? property.turnoverDate.toISOString().split('T')[0]
+          : '',
+        tags: property.tags.join(', '),
+        description: property.description ?? '',
       });
-      setUploadedImages(property.images || []);
+      setUploadedImages(property.images);
     } else {
-      setFormData({
-        title: '',
-        type: 'condo',
-        status: 'available',
-        price: '',
-        address: '',
-        city: '',
-        province: '',
-        region: '',
-        bedrooms: '',
-        bathrooms: '',
-        floorArea: '',
-        lotArea: '',
-        parking: '',
-        tags: '',
-      });
+      setFormData(BLANK_FORM);
       setUploadedImages([]);
-      setSelectedFiles([]);
-      setPreviewUrls([]);
     }
-    setError('');
+    setSelectedFiles([]);
+    setPreviewUrls([]);
+    setFormError('');
   }, [isOpen, property, isEditMode]);
 
+  // Revoke preview URLs on unmount
+  useEffect(() => {
+    return () => previewUrls.forEach((u) => URL.revokeObjectURL(u));
+  }, [previewUrls]);
+
+  const handleChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
+  ) => setFormData((prev) => ({ ...prev, [e.target.name]: e.target.value }));
+
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files) return;
-
-    const newFiles: File[] = [];
-    const errors: string[] = [];
-
-    Array.from(files).forEach((file) => {
-      if (isValidImage(file)) {
-        newFiles.push(file);
-      } else {
-        errors.push(getImageValidationError(file));
-      }
-    });
-
-    if (errors.length > 0) {
-      setError(errors[0]);
-      return;
+    const files = Array.from(e.target.files ?? []);
+    const valid: File[] = [];
+    for (const file of files) {
+      const err = getImageValidationError(file);
+      if (err) { setFormError(err); return; }
+      if (isValidImage(file)) valid.push(file);
     }
-
-    setSelectedFiles([...selectedFiles, ...newFiles]);
-
-    // Create preview URLs
-    const newPreviews = newFiles.map((file) => URL.createObjectURL(file));
-    setPreviewUrls([...previewUrls, ...newPreviews]);
+    setSelectedFiles((prev) => [...prev, ...valid]);
+    setPreviewUrls((prev) => [...prev, ...valid.map((f) => URL.createObjectURL(f))]);
+    e.target.value = '';
   };
 
-  const handleRemoveSelectedImage = (index: number) => {
-    URL.revokeObjectURL(previewUrls[index]);
-    setSelectedFiles(selectedFiles.filter((_, i) => i !== index));
-    setPreviewUrls(previewUrls.filter((_, i) => i !== index));
+  const removeSelected = (i: number) => {
+    URL.revokeObjectURL(previewUrls[i]);
+    setSelectedFiles((p) => p.filter((_, idx) => idx !== i));
+    setPreviewUrls((p) => p.filter((_, idx) => idx !== i));
   };
 
-  const handleRemoveUploadedImage = (imageUrl: string) => {
-    setUploadedImages(uploadedImages.filter((url) => url !== imageUrl));
-  };
+  const removeUploaded = (url: string) =>
+    setUploadedImages((p) => p.filter((u) => u !== url));
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
-    setIsLoading(true);
+    setFormError('');
 
+    if (!formData.title.trim()) { setFormError('Property title is required.'); return; }
+    if (!formData.price || Number(formData.price) <= 0) { setFormError('A valid price is required.'); return; }
+
+    setIsLoading(true);
     try {
-      // Upload new selected images to GHL Media Library
       let finalImages = [...uploadedImages];
-      
       if (selectedFiles.length > 0) {
-        setUploadingImages(true);
-        const uploadedUrls = await uploadImages(selectedFiles);
-        finalImages = [...finalImages, ...uploadedUrls];
-        setUploadingImages(false);
+        setIsUploading(true);
+        const urls = await uploadImages(selectedFiles);
+        finalImages = [...finalImages, ...urls];
+        setIsUploading(false);
       }
 
-      const propertyData = {
-        title: formData.title,
+      const payload = {
+        title: formData.title.trim(),
         type: formData.type,
         status: formData.status,
-        price: parseInt(formData.price) || 0,
+        price: Number(formData.price),
         location: {
-          address: formData.address,
-          city: formData.city,
-          province: formData.province,
-          region: formData.region,
+          address: formData.address.trim(),
+          city: formData.city.trim(),
+          province: formData.province.trim(),
+          region: formData.region.trim(),
         },
         details: {
-          bedrooms: formData.bedrooms ? parseInt(formData.bedrooms) : undefined,
-          bathrooms: formData.bathrooms ? parseInt(formData.bathrooms) : undefined,
-          floorArea: formData.floorArea ? parseInt(formData.floorArea) : undefined,
-          lotArea: formData.lotArea ? parseInt(formData.lotArea) : undefined,
-          parking: formData.parking ? parseInt(formData.parking) : undefined,
+          bedrooms: formData.bedrooms ? Number(formData.bedrooms) : undefined,
+          bathrooms: formData.bathrooms ? Number(formData.bathrooms) : undefined,
+          floorArea: formData.floorArea ? Number(formData.floorArea) : undefined,
+          lotArea: formData.lotArea ? Number(formData.lotArea) : undefined,
+          parking: formData.parking ? Number(formData.parking) : undefined,
         },
-        tags: formData.tags
-          .split(',')
-          .map((tag) => tag.trim())
-          .filter((tag) => tag),
+        developer: formData.developer.trim() || undefined,
+        turnoverDate: formData.turnoverDate ? new Date(formData.turnoverDate) : undefined,
+        tags: formData.tags.split(',').map((t) => t.trim()).filter(Boolean),
+        description: formData.description.trim() || undefined,
+        images: finalImages,
       };
 
       if (isEditMode && property) {
-        await propertyService.updateProperty(property.id, {
-          ...propertyData,
-          images: finalImages,
-        });
+        await propertyService.updateProperty(property.id, payload);
         onPropertyUpdated?.({
           ...property,
-          ...propertyData,
-          images: finalImages,
-          agentId: property.agentId,
-          createdAt: property.createdAt,
+          ...payload,
           updatedAt: new Date(),
         });
+        showToast('Property updated successfully.', 'success');
       } else {
-        const newProperty = await propertyService.createProperty({
-          ...propertyData,
-          images: finalImages,
-          agentId,
-        });
-        onPropertyAdded?.(newProperty);
+        const created = await propertyService.createProperty({ ...payload, agentId });
+        onPropertyAdded?.(created);
+        showToast('Property created successfully.', 'success');
       }
 
-      setFormData({
-        title: '',
-        type: 'condo',
-        status: 'available',
-        price: '',
-        address: '',
-        city: '',
-        province: '',
-        region: '',
-        bedrooms: '',
-        bathrooms: '',
-        floorArea: '',
-        lotArea: '',
-        parking: '',
-        tags: '',
-      });
-      setUploadedImages([]);
-      setSelectedFiles([]);
-      previewUrls.forEach((url) => URL.revokeObjectURL(url));
-      setPreviewUrls([]);
       onClose();
     } catch (err: any) {
-      setError(err.message || (isEditMode ? 'Failed to update property' : 'Failed to create property'));
+      const msg = err.message || (isEditMode ? 'Failed to update property.' : 'Failed to create property.');
+      setFormError(msg);
+      showToast(msg, 'error');
     } finally {
       setIsLoading(false);
-      setUploadingImages(false);
+      setIsUploading(false);
     }
   };
 
-  const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
-  ) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value,
-    });
-  };
+  const totalImages = uploadedImages.length + previewUrls.length;
 
   return (
-    <Modal 
-      isOpen={isOpen} 
-      onClose={onClose} 
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
       title={isEditMode ? 'Edit Property' : 'Add New Property'}
-      size="lg"
+      size="xl"
     >
-      <form onSubmit={handleSubmit} className="space-y-4 max-h-96 overflow-y-auto">
-        {error && (
-          <div className="p-3 bg-error bg-opacity-10 border border-error rounded-lg text-error text-sm">
-            {error}
-          </div>
-        )}
-
-        <Input
-          label="Property Title"
-          name="title"
-          placeholder="e.g., Luxury Condo in BGC"
-          value={formData.title}
-          onChange={handleChange}
-          required
-        />
-
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-text mb-1">
-              Property Type
-            </label>
-            <select
-              name="type"
-              value={formData.type}
-              onChange={handleChange}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-primary"
-            >
-              <option value="house_and_lot">House & Lot</option>
-              <option value="condo">Condo</option>
-              <option value="lot">Lot</option>
-              <option value="commercial">Commercial</option>
-              <option value="apartment">Apartment</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-text mb-1">
-              Status
-            </label>
-            <select
-              name="status"
-              value={formData.status}
-              onChange={handleChange}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-primary"
-            >
-              <option value="available">Available</option>
-              <option value="reserved">Reserved</option>
-              <option value="sold">Sold</option>
-              <option value="for_rent">For Rent</option>
-              <option value="rented">Rented</option>
-            </select>
-          </div>
-        </div>
-
-        <Input
-          label="Price (₱)"
-          name="price"
-          type="number"
-          placeholder="0"
-          value={formData.price}
-          onChange={handleChange}
-          required
-        />
-
-        <Input
-          label="Address"
-          name="address"
-          placeholder="123 Main Street"
-          value={formData.address}
-          onChange={handleChange}
-          required
-        />
-
-        <div className="grid grid-cols-2 gap-4">
-          <Input
-            label="City"
-            name="city"
-            placeholder="Manila"
-            value={formData.city}
-            onChange={handleChange}
-            required
-          />
-          <Input
-            label="Province"
-            name="province"
-            placeholder="NCR"
-            value={formData.province}
-            onChange={handleChange}
-            required
-          />
-        </div>
-
-        <Input
-          label="Region"
-          name="region"
-          placeholder="NCR"
-          value={formData.region}
-          onChange={handleChange}
-          required
-        />
-
-        <div className="grid grid-cols-2 gap-4">
-          <Input
-            label="Bedrooms"
-            name="bedrooms"
-            type="number"
-            placeholder="0"
-            value={formData.bedrooms}
-            onChange={handleChange}
-          />
-          <Input
-            label="Bathrooms"
-            name="bathrooms"
-            type="number"
-            placeholder="0"
-            value={formData.bathrooms}
-            onChange={handleChange}
-          />
-        </div>
-
-        <div className="grid grid-cols-2 gap-4">
-          <Input
-            label="Floor Area (sqm)"
-            name="floorArea"
-            type="number"
-            placeholder="0"
-            value={formData.floorArea}
-            onChange={handleChange}
-          />
-          <Input
-            label="Lot Area (sqm)"
-            name="lotArea"
-            type="number"
-            placeholder="0"
-            value={formData.lotArea}
-            onChange={handleChange}
-          />
-        </div>
-
-        <Input
-          label="Parking Spaces"
-          name="parking"
-          type="number"
-          placeholder="0"
-          value={formData.parking}
-          onChange={handleChange}
-        />
-
-        <Input
-          label="Tags (comma-separated)"
-          name="tags"
-          placeholder="luxury, bgc, investment"
-          value={formData.tags}
-          onChange={handleChange}
-        />
-
-        {/* Image Upload Section */}
-        <div className="border-t pt-4 mt-4">
-          <label className="block text-sm font-medium text-text mb-2">
-            Property Images
-          </label>
-          
-          {/* File Input */}
-          <div className="mb-4">
-            <input
-              type="file"
-              multiple
-              accept="image/*"
-              onChange={handleFileSelect}
-              disabled={uploadingImages || isLoading}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-primary disabled:opacity-50"
-            />
-            <p className="text-xs text-gray-500 mt-1">
-              Max 5MB per image. Supports JPEG, PNG, WebP, GIF
-            </p>
-          </div>
-
-          {/* Uploaded Images */}
-          {uploadedImages.length > 0 && (
-            <div className="mb-4">
-              <p className="text-xs font-medium text-gray-600 mb-2">
-                Uploaded Images ({uploadedImages.length})
-              </p>
-              <div className="grid grid-cols-3 gap-2">
-                {uploadedImages.map((imageUrl, index) => (
-                  <div
-                    key={index}
-                    className="relative group"
-                  >
-                    <img
-                      src={imageUrl}
-                      alt={`Property ${index}`}
-                      className="w-full h-24 object-cover rounded-lg"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveUploadedImage(imageUrl)}
-                      className="absolute top-1 right-1 bg-error rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                    >
-                      <X size={14} className="text-white" />
-                    </button>
-                  </div>
-                ))}
-              </div>
+      <form onSubmit={handleSubmit}>
+        {/* Scrollable body */}
+        <div className="max-h-[70vh] overflow-y-auto pr-1 space-y-5">
+          {formError && (
+            <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+              {formError}
             </div>
           )}
 
-          {/* Selected Images Preview */}
-          {previewUrls.length > 0 && (
-            <div>
-              <p className="text-xs font-medium text-gray-600 mb-2">
-                New Images ({previewUrls.length})
-              </p>
-              <div className="grid grid-cols-3 gap-2">
-                {previewUrls.map((previewUrl, index) => (
-                  <div
-                    key={index}
-                    className="relative group"
-                  >
-                    <img
-                      src={previewUrl}
-                      alt={`Preview ${index}`}
-                      className="w-full h-24 object-cover rounded-lg"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveSelectedImage(index)}
-                      className="absolute top-1 right-1 bg-error rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                    >
-                      <X size={14} className="text-white" />
-                    </button>
-                  </div>
-                ))}
+          {/* Basic Info */}
+          <section>
+            <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
+              Basic Info
+            </h3>
+            <div className="space-y-3">
+              <Input
+                label="Property Title *"
+                name="title"
+                placeholder="e.g., 3BR Condo in BGC"
+                value={formData.title}
+                onChange={handleChange}
+              />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className={labelClass}>Property Type</label>
+                  <select name="type" value={formData.type} onChange={handleChange} className={selectClass}>
+                    <option value="house_and_lot">House &amp; Lot</option>
+                    <option value="condo">Condominium</option>
+                    <option value="lot">Lot Only</option>
+                    <option value="commercial">Commercial</option>
+                    <option value="apartment">Apartment</option>
+                  </select>
+                </div>
+                <div>
+                  <label className={labelClass}>Status</label>
+                  <select name="status" value={formData.status} onChange={handleChange} className={selectClass}>
+                    <option value="available">Available</option>
+                    <option value="reserved">Reserved</option>
+                    <option value="sold">Sold</option>
+                    <option value="for_rent">For Rent</option>
+                    <option value="rented">Rented</option>
+                  </select>
+                </div>
+              </div>
+              <Input
+                label="Price (₱) *"
+                name="price"
+                type="number"
+                placeholder="0"
+                value={formData.price}
+                onChange={handleChange}
+              />
+            </div>
+          </section>
+
+          {/* Location */}
+          <section>
+            <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
+              Location
+            </h3>
+            <div className="space-y-3">
+              <Input label="Address" name="address" placeholder="123 Main Street" value={formData.address} onChange={handleChange} />
+              <div className="grid grid-cols-2 gap-3">
+                <Input label="City" name="city" placeholder="Makati" value={formData.city} onChange={handleChange} />
+                <Input label="Province" name="province" placeholder="Metro Manila" value={formData.province} onChange={handleChange} />
+              </div>
+              <Input label="Region" name="region" placeholder="NCR" value={formData.region} onChange={handleChange} />
+            </div>
+          </section>
+
+          {/* Property Details */}
+          <section>
+            <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
+              Property Details
+            </h3>
+            <div className="grid grid-cols-3 gap-3">
+              <Input label="Bedrooms" name="bedrooms" type="number" placeholder="0" value={formData.bedrooms} onChange={handleChange} />
+              <Input label="Bathrooms" name="bathrooms" type="number" placeholder="0" value={formData.bathrooms} onChange={handleChange} />
+              <Input label="Parking Spaces" name="parking" type="number" placeholder="0" value={formData.parking} onChange={handleChange} />
+              <Input label="Floor Area (sqm)" name="floorArea" type="number" placeholder="0" value={formData.floorArea} onChange={handleChange} />
+              <Input label="Lot Area (sqm)" name="lotArea" type="number" placeholder="0" value={formData.lotArea} onChange={handleChange} />
+            </div>
+          </section>
+
+          {/* Additional Info */}
+          <section>
+            <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
+              Additional Info
+            </h3>
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <Input label="Developer" name="developer" placeholder="e.g., Ayala Land" value={formData.developer} onChange={handleChange} />
+                <div>
+                  <label className={labelClass}>Turnover Date</label>
+                  <input
+                    type="date"
+                    name="turnoverDate"
+                    value={formData.turnoverDate}
+                    onChange={handleChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+                  />
+                </div>
+              </div>
+              <Input
+                label="Tags (comma-separated)"
+                name="tags"
+                placeholder="luxury, investment, beachfront"
+                value={formData.tags}
+                onChange={handleChange}
+              />
+              <div>
+                <label className={labelClass}>Description</label>
+                <textarea
+                  name="description"
+                  value={formData.description}
+                  onChange={handleChange}
+                  rows={3}
+                  placeholder="Describe the property, highlights, nearby amenities..."
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary resize-none"
+                />
               </div>
             </div>
-          )}
+          </section>
+
+          {/* Images */}
+          <section>
+            <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
+              Property Images {totalImages > 0 && `(${totalImages})`}
+            </h3>
+
+            <label className="flex flex-col items-center justify-center gap-2 border-2 border-dashed border-gray-200 rounded-xl p-6 cursor-pointer hover:border-primary hover:bg-blue-50/30 transition-colors">
+              <Upload size={22} className="text-gray-400" />
+              <span className="text-sm text-gray-500">Click to add images</span>
+              <span className="text-xs text-gray-400">JPEG, PNG, WebP — max 5MB each</span>
+              <input type="file" multiple accept="image/*" onChange={handleFileSelect} className="hidden" disabled={isLoading} />
+            </label>
+
+            {/* Already-uploaded images */}
+            {uploadedImages.length > 0 && (
+              <div className="mt-3">
+                <p className="text-xs text-gray-400 mb-2">Saved images</p>
+                <div className="grid grid-cols-4 gap-2">
+                  {uploadedImages.map((url, i) => (
+                    <div key={i} className="relative group aspect-square rounded-lg overflow-hidden bg-gray-100">
+                      <img src={url} alt="" className="w-full h-full object-cover" />
+                      <button
+                        type="button"
+                        onClick={() => removeUploaded(url)}
+                        className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity"
+                      >
+                        <X size={18} className="text-white" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Pending new images */}
+            {previewUrls.length > 0 && (
+              <div className="mt-3">
+                <p className="text-xs text-gray-400 mb-2">New images (pending upload)</p>
+                <div className="grid grid-cols-4 gap-2">
+                  {previewUrls.map((url, i) => (
+                    <div key={i} className="relative group aspect-square rounded-lg overflow-hidden bg-gray-100">
+                      <img src={url} alt="" className="w-full h-full object-cover" />
+                      <button
+                        type="button"
+                        onClick={() => removeSelected(i)}
+                        className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity"
+                      >
+                        <X size={18} className="text-white" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {totalImages === 0 && (
+              <div className="mt-3 flex items-center gap-2 text-gray-400 text-xs">
+                <ImageIcon size={14} />
+                <span>No images added yet</span>
+              </div>
+            )}
+          </section>
         </div>
 
-        <div className="flex gap-2 pt-4">
-          <Button
-            type="button"
-            variant="outline"
-            className="flex-1"
-            onClick={onClose}
-          >
+        {/* Fixed footer */}
+        <div className="flex gap-3 pt-5 mt-2 border-t">
+          <Button type="button" variant="outline" className="flex-1" onClick={onClose} disabled={isLoading}>
             Cancel
           </Button>
-          <Button
-            type="submit"
-            variant="primary"
-            className="flex-1"
-            isLoading={isLoading || uploadingImages}
-          >
-            {isEditMode ? 'Update Property' : 'Create Property'}
+          <Button type="submit" variant="primary" className="flex-1" isLoading={isLoading || isUploading}>
+            {isUploading ? 'Uploading images...' : isEditMode ? 'Save Changes' : 'Create Property'}
           </Button>
         </div>
       </form>
