@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { signInWithEmailAndPassword, signInWithRedirect, getRedirectResult, GoogleAuthProvider } from 'firebase/auth';
 import { auth } from '../lib/firebase';
 import { Button } from '../components/ui/Button';
@@ -15,12 +16,17 @@ export const LoginPage = ({ onSwitchToSignup }: LoginPageProps) => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const navigate = useNavigate();
 
   // Process the result when Google redirects back to this page
   useEffect(() => {
-    getRedirectResult(auth).catch((err: any) => {
-      setError(err.message || 'Failed to login with Google');
-    });
+    getRedirectResult(auth)
+      .then((result) => {
+        if (result) navigate('/dashboard');
+      })
+      .catch((err: any) => {
+        setError(err.message || 'Failed to login with Google');
+      });
   }, []);
 
   const handleEmailLogin = async (e: React.FormEvent) => {
@@ -30,7 +36,7 @@ export const LoginPage = ({ onSwitchToSignup }: LoginPageProps) => {
 
     try {
       await signInWithEmailAndPassword(auth, email, password);
-      // Auth state will be handled by useAuth hook
+      navigate('/dashboard');
     } catch (err: any) {
       console.log('Login error:', err.code, err.message);
       setError(err.message || 'Failed to login');

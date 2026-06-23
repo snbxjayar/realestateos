@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
 import { auth, db } from '../lib/firebase';
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
@@ -19,6 +20,7 @@ export const SignupPage = ({ onSwitchToLogin }: SignupPageProps) => {
   const [role, setRole] = useState<'agent' | 'broker'>('agent');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const navigate = useNavigate();
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -52,7 +54,7 @@ export const SignupPage = ({ onSwitchToLogin }: SignupPageProps) => {
         createdAt: serverTimestamp(),
       });
 
-      // Auth state will be handled by useAuth hook
+      navigate('/dashboard');
     } catch (err: any) {
       setError(err.message || 'Failed to create account');
     } finally {

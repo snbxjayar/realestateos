@@ -14,6 +14,14 @@ import { AuthPage } from './pages/Auth';
 import { PublicListings } from './pages/public/PublicListings';
 import { PublicPropertyDetail } from './pages/public/PublicPropertyDetail';
 
+// Redirects logged-in users away from /auth to /dashboard
+const AuthRoute = ({ children }: { children: React.ReactNode }) => {
+  const { user, isLoading } = useAuth();
+  if (isLoading) return null;
+  if (user) return <Navigate to="/dashboard" replace />;
+  return <>{children}</>;
+};
+
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, isLoading } = useAuth();
 
@@ -43,7 +51,7 @@ function App() {
       <Routes>
         <Route path="/" element={<PublicListings />} />
         <Route path="/listings/:id" element={<PublicPropertyDetail />} />
-        <Route path="/auth" element={<AuthPage />} />
+        <Route path="/auth" element={<AuthRoute><AuthPage /></AuthRoute>} />
         <Route
           path="/dashboard"
           element={
