@@ -32,6 +32,7 @@ export const LoginPage = ({ onSwitchToSignup }: LoginPageProps) => {
       await signInWithEmailAndPassword(auth, email, password);
       // Auth state will be handled by useAuth hook
     } catch (err: any) {
+      console.log('Login error:', err.code, err.message);
       setError(err.message || 'Failed to login');
     } finally {
       setIsLoading(false);
