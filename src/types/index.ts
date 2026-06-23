@@ -91,6 +91,17 @@ export interface Deal {
   updatedAt: Date;
 }
 
+// Activity / Timeline Types
+export type ActivityType = 'note' | 'status_change' | 'sms' | 'email' | 'call';
+
+export interface Activity {
+  id: string;
+  type: ActivityType;
+  content: string;
+  createdBy: string;
+  createdAt: Date;
+}
+
 // Dashboard KPI Types
 export interface DashboardKPIs {
   totalListings: number;
